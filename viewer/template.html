@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Microbiome knowledge graph</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/css/tabulator_midnight.min.css" rel="stylesheet">
+<style>
+:root {
+  --bg: #0B0F17;
+  --surface: #141B2D;
+  --surface2: #1A2235;
+  --border: #242F4A;
+  --border2: #2E3D5C;
+  --text-primary: #E8EAF0;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent: #3B82F6;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --grade-a: #10B981;
+  --grade-b: #34D399;
+  --grade-c: #F59E0B;
+  --grade-d: #EF4444;
+  --radius: 10px;
+}
+* { box-sizing: border-box; }
+body { margin:0; font-family:var(--sans); background:var(--bg); color:var(--text-primary); font-size:14px; }
+
+/* Header */
+header { padding:20px 36px; border-bottom:1px solid var(--border); background:var(--surface); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; }
+header h1 { font-size:18px; font-weight:700; letter-spacing:-0.01em; margin:0; font-family:var(--mono); color:var(--text-primary); }
+header h1 span { color:var(--accent); }
+.stats { display:flex; gap:12px; }
+.stat-card { background:var(--bg); border:1px solid var(--border); padding:8px 16px; border-radius:var(--radius); min-width:110px; }
+.stat-card .num { font-family:var(--mono); font-size:20px; font-weight:700; }
+.stat-card .lbl { font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary); margin-top:1px; }
+
+/* Nav */
+nav.tabs { display:flex; gap:4px; padding:0 36px; background:var(--surface); border-bottom:1px solid var(--border); }
+nav.tabs button { padding:13px 16px; border:none; background:none; font-size:13px; font-weight:600; color:var(--text-secondary); cursor:pointer; border-bottom:2px solid transparent; font-family:var(--sans); }
+nav.tabs button.active { color:var(--accent); border-bottom-color:var(--accent); }
+nav.tabs button:hover:not(.active) { color:var(--text-primary); }
+
+/* Main */
+main { padding:24px 36px 48px; max-width:1400px; margin:0 auto; }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* Toolbar */
+.toolbar { display:flex; gap:12px; margin-bottom:14px; align-items:center; flex-wrap:wrap; background:var(--surface); padding:12px 14px; border-radius:var(--radius); border:1px solid var(--border); }
+.toolbar input[type="text"], .toolbar select { padding:8px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-family:var(--sans); background:var(--bg); color:var(--text-primary); outline:none; }
+.toolbar input[type="text"]:focus, .toolbar select:focus { border-color:var(--accent); }
+.toolbar input[type="text"] { flex:1; max-width:340px; }
+.toolbar label { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-secondary); cursor:pointer; white-space:nowrap; }
+.toolbar input[type="checkbox"] { accent-color:var(--accent); width:14px; height:14px; }
+.caption { color:var(--text-secondary); font-size:12px; margin-bottom:10px; }
+
+/* Badges */
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; color:#fff; white-space:nowrap; }
+.badge.outline { background:none; border:1px solid var(--border); color:var(--text-secondary); font-weight:500; }
+.pval { font-family:var(--mono); font-size:12px; color:#7DA8F2; }
+
+/* Tabulator overrides */
+.tabulator { border:1px solid var(--border) !important; background-color:var(--surface) !important; border-radius:var(--radius) !important; overflow:hidden; }
+.tabulator-header { background-color:var(--surface) !important; border-bottom:2px solid var(--border) !important; }
+.tabulator-row { background-color:var(--surface) !important; border-bottom:1px solid var(--border) !important; cursor:pointer; }
+.tabulator-row:hover { background-color:var(--surface2) !important; }
+.org-name { font-style:italic; }
+
+/* ── ORGANISM DETAIL PANEL ── */
+.detail-panel { margin-top:20px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.detail-panel.hidden { display:none; }
+
+.detail-header { padding:18px 20px 0; border-bottom:1px solid var(--border); }
+.detail-header h2 { font-size:17px; margin:0 0 3px; color:#fff; font-style:italic; }
+.detail-meta { font-family:var(--mono); font-size:11px; color:var(--text-muted); margin-bottom:10px; }
+.detail-counts { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
+.detail-count { font-size:12px; color:var(--text-secondary); }
+.detail-count strong { color:var(--text-primary); font-family:var(--mono); }
+
+/* Sub-tabs -- styled like terminal prompts */
+.sub-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); padding:0 20px; background:var(--bg); }
+.sub-tab-btn { padding:9px 14px; border:none; background:none; font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; font-family:var(--mono); letter-spacing:0.02em; transition:color 0.15s; }
+.sub-tab-btn::before { content:"> "; opacity:0; }
+.sub-tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+.sub-tab-btn.active::before { opacity:1; }
+.sub-tab-btn:hover:not(.active) { color:var(--text-secondary); }
+.sub-tab-btn .sub-count { font-size:10px; color:var(--text-muted); margin-left:4px; }
+.sub-tab-btn.active .sub-count { color:var(--accent); opacity:0.7; }
+
+.sub-panel { display:none; padding:16px 20px; max-height:460px; overflow-y:auto; }
+.sub-panel.active { display:block; }
+.empty { color:var(--text-muted); font-size:13px; font-style:italic; }
+
+/* Disease cards -- two-tier layout */
+.d-card { border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px; background:var(--bg); }
+.d-card-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.d-card-name { font-weight:600; font-size:13px; flex:1; min-width:0; }
+.d-card-row1 { color:var(--text-secondary); font-size:12px; margin-top:5px; display:flex; flex-wrap:wrap; gap:8px; }
+.d-card-row2 { color:var(--text-muted); font-size:11px; margin-top:4px; display:flex; flex-wrap:wrap; gap:8px; font-family:var(--mono); }
+.d-sep { color:var(--border2); }
+
+/* Intervention cards */
+.i-card { border:1px solid var(--border); border-radius:8px; padding:9px 12px; margin-bottom:8px; background:var(--bg); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.i-card-left { font-weight:600; font-size:13px; }
+.i-card-right { font-size:12px; color:var(--text-secondary); text-align:right; }
+
+/* Specialty genes */
+.sg-section { margin-bottom:14px; }
+.sg-section-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; }
+.sg-row { padding:5px 0; border-bottom:1px solid var(--border); font-size:12.5px; display:flex; gap:10px; align-items:baseline; }
+.sg-row:last-child { border-bottom:none; }
+.sg-gene { font-family:var(--mono); color:#7DA8F2; font-size:12px; min-width:80px; flex-shrink:0; }
+.sg-product { flex:1; color:var(--text-secondary); }
+.sg-source { font-size:11px; color:var(--text-muted); flex-shrink:0; }
+.sg-more { font-size:11px; color:var(--text-muted); padding-top:4px; }
+
+/* Genome info */
+.genome-box { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px; font-size:13px; }
+.genome-box table { width:100%; border-collapse:collapse; }
+.genome-box td { padding:4px 0; vertical-align:top; }
+.genome-box td:first-child { color:var(--text-muted); width:140px; font-size:12px; }
+.genome-box td:last-child { font-family:var(--mono); font-size:12px; color:var(--text-secondary); }
+.synonyms { font-size:12.5px; color:var(--text-secondary); background:var(--bg); border:1px dashed var(--border); border-radius:8px; padding:10px 12px; margin-top:10px; }
+
+/* Body site cards */
+.site-card { border:1px solid var(--border); border-radius:8px; padding:9px 12px; margin-bottom:8px; background:var(--bg); }
+
+/* Phenotype cards */
+.p-card { border:1px solid var(--border); border-radius:8px; padding:9px 12px; margin-bottom:8px; background:var(--bg); display:flex; justify-content:space-between; align-items:center; }
+
+/* Scrollbar styling */
+.sub-panel::-webkit-scrollbar { width:4px; }
+.sub-panel::-webkit-scrollbar-track { background:transparent; }
+.sub-panel::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+
+/* Disease detail panel (diseases tab) */
+.detail-panel-simple { margin-top:20px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; }
+.detail-panel-simple.hidden { display:none; }
+.detail-panel-simple h2 { font-size:16px; margin:0 0 12px; color:#fff; }
+.card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+.card-head { display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:600; }
+.card-cap { color:var(--text-secondary); font-size:12px; margin-top:5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>microbiome<span>.</span>kg</h1>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="stats" id="stats"></div>
+    <button id="about-btn" style="padding:7px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:var(--mono);white-space:nowrap">? about</button>
+  </div>
+</header>
+
+<div id="about-panel" style="display:none;background:var(--surface);border-bottom:1px solid var(--border);padding:20px 36px;font-size:13px;line-height:1.7;color:var(--text-secondary)">
+  <div style="max-width:1000px;display:grid;grid-template-columns:1fr 1fr;gap:32px">
+    <div>
+      <h3 style="color:var(--text-primary);font-size:13px;text-transform:uppercase;letter-spacing:0.04em;margin:0 0 10px;font-family:var(--mono)">Evidence grading</h3>
+      <p style="margin:0 0 8px"><span style="background:#10B981;color:#fff;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700">grade A</span> — Two or more independent replications, zero contradictions. The strongest observational evidence.</p>
+      <p style="margin:0 0 8px"><span style="background:#34D399;color:#fff;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700">grade B</span> — A single supporting study, no contradictions. Preliminary signal worth following up.</p>
+      <p style="margin:0 0 8px"><span style="background:#EF4444;color:#fff;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700">grade D</span> — Contradictions present across studies. Inconsistent or conflicting evidence.</p>
+      <p style="margin:0 0 8px"><span style="background:#B45309;color:#fff;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700">⚗ causal (mouse)</span> — Germ-free mouse colonization study. Causal evidence in an animal model, not just correlation.</p>
+      <p style="margin:0"><span style="background:#1D4ED8;color:#fff;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700">⚡ RCT</span> — Randomized controlled trial. The strongest available human evidence for causality.</p>
+    </div>
+    <div>
+      <h3 style="color:var(--text-primary);font-size:13px;text-transform:uppercase;letter-spacing:0.04em;margin:0 0 10px;font-family:var(--mono)">Data sources</h3>
+      <p style="margin:0 0 6px"><strong style="color:var(--text-primary)">Disbiome</strong> — Primary disease-association source. Curates case-control studies from the published literature.</p>
+      <p style="margin:0 0 6px"><strong style="color:var(--text-primary)">BugSigDB</strong> — Second independent disease-association source. Differential-abundance signatures from peer-reviewed studies. Quality-filtered to case-control, cross-sectional, prospective cohort, and RCT designs with real sample sizes and signatures ≤40 taxa.</p>
+      <p style="margin:0 0 6px"><strong style="color:var(--text-primary)">Maier et al. 2018</strong> — Drug interactions. 1,197 compounds screened against 38 gut bacteria (Nature, FDR p&lt;0.01).</p>
+      <p style="margin:0 0 6px"><strong style="color:var(--text-primary)">BV-BRC</strong> — Specialty genes (virulence, AMR, drug targets). Note: "Antibiotic Resistance: PATRIC" is BV-BRC's own internal curation, more permissive than CARD.</p>
+      <p style="margin:0"><strong style="color:var(--text-primary)">BacSPaD / UHGG</strong> — Body-site and genome data. BacSPaD reflects clinical-sequencing bias toward pathogens, not general microbiome ecology.</p>
+    </div>
+    <div>
+      <h3 style="color:var(--text-primary);font-size:13px;text-transform:uppercase;letter-spacing:0.04em;margin:0 0 10px;font-family:var(--mono)">Known limitations</h3>
+      <p style="margin:0 0 6px">All associations are correlational unless marked ⚗ or ⚡. Correlation does not imply causation.</p>
+      <p style="margin:0 0 6px">14 disease names appear under two different ontology IDs — confirmed genuine upstream ambiguities in the MONDO/MedDRA ontologies, not pipeline errors.</p>
+      <p style="margin:0 0 6px">Geography coverage is ~9% — PubMed MeSH country tagging is sparse for microbiome literature.</p>
+      <p style="margin:0">Body-site sampling location affects interpretability: an organism "increased" in a disease found via blood sampling may reflect systemic effects, not direct gut involvement.</p>
+    </div>
+    <div>
+      <h3 style="color:var(--text-primary);font-size:13px;text-transform:uppercase;letter-spacing:0.04em;margin:0 0 10px;font-family:var(--mono)">Ontology badges</h3>
+      <p style="margin:0 0 8px"><span style="background:#10B981;color:#fff;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700">MONDO</span> — Disease mapped to a real MONDO ontology ID. Enables cross-database comparisons.</p>
+      <p style="margin:0 0 8px"><span style="background:none;border:1px solid var(--border);color:var(--text-secondary);padding:1px 7px;border-radius:8px;font-size:11px">unmapped</span> — Disease stored under a MedDRA or EFO placeholder. Correct evidence, just not yet cross-referenced to MONDO.</p>
+    </div>
+  </div>
+</div>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="organisms">Organisms</button>
+  <button class="tab-btn" data-tab="diseases">Diseases</button>
+  <button class="tab-btn" data-tab="interventions">Interventions</button>
+  <button class="tab-btn" data-tab="phenotypes">Phenotypes</button>
+</nav>
+
+<style>
+.export-btn {
+  padding:7px 14px;
+  border:1px solid var(--border2);
+  border-radius:8px;
+  background:var(--bg);
+  color:var(--text-secondary);
+  font-size:12px;
+  cursor:pointer;
+  font-family:var(--mono);
+  margin-left:auto;
+  white-space:nowrap;
+}
+.export-btn:hover { color:var(--text-primary); border-color:var(--accent); }
+</style>
+
+<main>
+  <!-- ORGANISMS TAB -->
+  <section class="tab-panel active" id="tab-organisms">
+    <div class="toolbar">
+      <input type="text" id="org-search" placeholder="Search organisms...">
+      <label><input type="checkbox" id="org-grade-a"> Grade A only</label>
+      <label><input type="checkbox" id="org-has-genome" title="Has representative genome data"> Has genome</label>
+      <select id="org-site-filter" title="Filter by body site"></select>
+      <button class="export-btn" id="org-export-summary">↓ organisms.csv</button>
+      <button class="export-btn" id="org-export-associations">↓ all-associations.csv</button>
+    </div>
+    <div class="caption" id="org-count"></div>
+    <div id="organisms-table"></div>
+    <div class="detail-panel hidden" id="organism-detail"></div>
+  </section>
+
+  <!-- DISEASES TAB -->
+  <section class="tab-panel" id="tab-diseases">
+    <div class="toolbar">
+      <input type="text" id="dis-search" placeholder="Search diseases...">
+      <button class="export-btn" id="dis-export">↓ diseases.csv</button>
+    </div>
+    <div class="caption" id="dis-count"></div>
+    <div id="diseases-table"></div>
+    <div class="detail-panel-simple hidden" id="disease-detail"></div>
+  </section>
+
+  <!-- INTERVENTIONS TAB -->
+  <section class="tab-panel" id="tab-interventions">
+    <div class="caption">Drug data: Maier et al. 2018 (Nature). Food/exercise/sleep/fasting/probiotic: BugSigDB differential-abundance signatures.</div>
+    <div class="toolbar">
+      <input type="text" id="int-search" placeholder="Search interventions...">
+      <select id="int-type-filter">
+        <option value="">All types</option>
+        <option value="drug">Drug</option>
+        <option value="food">Food</option>
+        <option value="exercise">Exercise</option>
+        <option value="sleep">Sleep</option>
+        <option value="fasting">Fasting</option>
+        <option value="probiotic">Probiotic</option>
+      </select>
+      <button class="export-btn" id="int-export">↓ interventions.csv</button>
+    </div>
+    <div class="caption" id="int-count"></div>
+    <div id="interventions-table"></div>
+    <div class="detail-panel-simple hidden" id="intervention-detail"></div>
+  </section>
+
+  <!-- PHENOTYPES TAB -->
+  <section class="tab-panel" id="tab-phenotypes">
+    <div class="caption">Source: BugSigDB differential-abundance signatures, HP (Human Phenotype Ontology) terms.</div>
+    <div class="toolbar">
+      <input type="text" id="pheno-search" placeholder="Search phenotypes...">
+      <button class="export-btn" id="pheno-export">↓ phenotypes.csv</button>
+    </div>
+    <div class="caption" id="pheno-count"></div>
+    <div id="phenotypes-table"></div>
+    <div class="detail-panel-simple hidden" id="phenotype-detail"></div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/6.3.1/js/tabulator.min.js"></script>
+<script>
+const DATA = __DATA_JSON__;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const GRADE_COLORS = {A:"#10B981",B:"#34D399",C:"#F59E0B",D:"#EF4444"};
+const TYPE_COLORS = {drug:"#3B82F6",food:"#10B981",exercise:"#F59E0B",sleep:"#8B5CF6",fasting:"#EC4899",probiotic:"#34D399"};
+const PROP_COLORS = {"Antibiotic Resistance":"#EF4444","Virulence Factor":"#F59E0B","Drug Target":"#3B82F6","Transporter":"#8B5CF6","Human Homolog":"#06B6D4","Metal Resistance":"#6B7280"};
+
+function badge(label, color, title="") {
+  return `<span class="badge" style="background:${color}"${title ? ` title="${title}"`:``}>${label}</span>`;
+}
+function gradeBadge(g) { return badge(`grade ${g||"?"}`, GRADE_COLORS[g]||"#64748B"); }
+function typeBadge(t) { return badge(t||"?", TYPE_COLORS[t]||"#64748B"); }
+function mappedBadge(m) {
+  return m ? badge("MONDO", "#10B981") : `<span class="badge outline">unmapped</span>`;
+}
+function causalBadge(st) {
+  if (st === "gnotobiotic_mouse") return badge("⚗ causal (mouse)", "#B45309", "Germ-free mouse colonization study — causal evidence in animal model");
+  if (st === "rct") return badge("⚡ RCT", "#1D4ED8", "Randomized controlled trial — strongest human causal evidence");
+  return "";
+}
+function pathoBadge(frac) {
+  if (frac === null || frac === undefined) return "";
+  const pct = Math.round(frac * 100);
+  const c = frac >= 0.7 ? "#EF4444" : frac >= 0.3 ? "#F59E0B" : "#10B981";
+  return badge(`${pct}% pathogenic`, c);
+}
+function fmtP(p) { return (p===null||p===undefined) ? "n/a" : Number(p).toExponential(2); }
+
+// ── Organism detail loading (lazy fetch) ─────────────────────────────────────
+// Full organism detail (diseases, interventions, etc.) lives in data-organisms.json
+// to keep index.html under GitHub's 100MB file size limit. Fetched once on first
+// organism click and cached -- works over HTTP (GitHub Pages) or local file server.
+let DETAIL_DATA = null;
+let detailLoading = false;
+let detailCallbacks = [];
+
+async function getDetail(taxid) {
+  if (DETAIL_DATA) return DETAIL_DATA[taxid] || {};
+  return new Promise((resolve) => {
+    detailCallbacks.push(() => resolve(DETAIL_DATA[taxid] || {}));
+    if (!detailLoading) {
+      detailLoading = true;
+      fetch("data-organisms.json")
+        .then(r => r.json())
+        .then(d => {
+          DETAIL_DATA = d;
+          detailCallbacks.forEach(cb => cb());
+          detailCallbacks = [];
+        })
+        .catch(() => {
+          // Fallback: detail unavailable (e.g. file:// without server)
+          DETAIL_DATA = {};
+          detailCallbacks.forEach(cb => cb());
+          detailCallbacks = [];
+        });
+    }
+  });
+}
+
+// ── About panel toggle ────────────────────────────────────────────────────────
+document.getElementById("about-btn").addEventListener("click", () => {
+  const panel = document.getElementById("about-panel");
+  const btn = document.getElementById("about-btn");
+  const isOpen = panel.style.display !== "none";
+  panel.style.display = isOpen ? "none" : "block";
+  btn.textContent = isOpen ? "? about" : "✕ close";
+  btn.style.color = isOpen ? "" : "var(--accent)";
+  btn.style.borderColor = isOpen ? "" : "var(--accent)";
+});
+
+// ── Top-level tab routing ─────────────────────────────────────────────────────
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+  });
+});
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+document.getElementById("stats").innerHTML = [
+  ["Organisms", DATA.organisms.length],
+  ["Disease assoc.", DATA.organisms.reduce((s,o) => s + o.diseaseCount, 0)],
+  ["Interventions", DATA.organisms.reduce((s,o) => s + o.interventionCount, 0)],
+  ["Phenotypes", DATA.organisms.reduce((s,o) => s + o.phenotypeCount, 0)],
+].map(([lbl,num]) => `<div class="stat-card"><div class="num">${num.toLocaleString()}</div><div class="lbl">${lbl}</div></div>`).join("");
+
+// ── Organism table ────────────────────────────────────────────────────────────
+const orgTable = new Tabulator("#organisms-table", {
+  data: DATA.organisms,
+  layout: "fitColumns",
+  height: "340px",
+  columns: [
+    {title:"Organism", field:"name", formatter: c => `<span class="org-name">${c.getValue()}</span>`, widthGrow:2},
+    {title:"Rank", field:"rank", width:100},
+    {title:"Diseases", field:"diseaseCount", sorter:"number", width:100},
+    {title:"Interventions", field:"interventionCount", sorter:"number", width:115},
+    {title:"Phenotypes", field:"phenotypeCount", sorter:"number", width:100},
+    {title:"Specialty genes", field:"specialtyGeneCount", sorter:"number", width:130},
+    {title:"Genome quality", field:"genomeQuality", width:150, formatter: c => {
+      const r = c.getRow().getData();
+      if (!r.genomeQuality) return `<span style="color:var(--text-muted)">—</span>`;
+      const col = {high:"#3B82F6",medium:"#60A5FA",low:"#64748B"}[r.genomeQuality]||"#64748B";
+      return badge(`${r.genomeQuality} · ${Math.round(r.completeness)}%`, col);
+    }},
+  ],
+  initialSort: [{column:"diseaseCount", dir:"desc"}],
+});
+orgTable.on("rowClick", async (e, row) => {
+  const summaryOrg = row.getData();
+  const panel = document.getElementById("organism-detail");
+  // Show loading state immediately
+  panel.classList.remove("hidden");
+  panel.innerHTML = `<div style="padding:20px;color:var(--text-muted);font-family:var(--mono);font-size:13px">Loading organism detail...</div>`;
+  const detail = await getDetail(summaryOrg.taxid);
+  const org = {...summaryOrg, ...detail};
+  renderOrganismDetail(org);
+});
+
+// Body-site filter
+const allSites = new Set();
+DATA.organisms.forEach(o => o.bodysites.forEach(s => allSites.add(s.site)));
+document.getElementById("org-site-filter").innerHTML =
+  '<option value="">All body sites</option>' +
+  Array.from(allSites).sort().map(s => `<option value="${s}">${s}</option>`).join("");
+
+function applyOrgFilters() {
+  const q = document.getElementById("org-search").value.toLowerCase();
+  const gradeA = document.getElementById("org-grade-a").checked;
+  const hasGenome = document.getElementById("org-has-genome").checked;
+  const site = document.getElementById("org-site-filter").value;
+  orgTable.setFilter(d => {
+    if (q && !d.name.toLowerCase().includes(q)) return false;
+    if (gradeA && !d.diseases.some(x => x.grade === "A")) return false;
+    if (hasGenome && !d.genomeQuality) return false;
+    if (site && !d.bodysites.some(s => s.site === site)) return false;
+    return true;
+  });
+  document.getElementById("org-count").textContent = orgTable.getDataCount("active") + " organisms";
+}
+["input","change"].forEach(ev => {
+  document.getElementById("org-search").addEventListener(ev, applyOrgFilters);
+  document.getElementById("org-site-filter").addEventListener("change", applyOrgFilters);
+});
+document.getElementById("org-grade-a").addEventListener("change", applyOrgFilters);
+document.getElementById("org-has-genome").addEventListener("change", applyOrgFilters);
+orgTable.on("tableBuilt", () => { document.getElementById("org-count").textContent = DATA.organisms.length + " organisms"; });
+
+// ── Organism detail with sub-tabs ─────────────────────────────────────────────
+function renderOrganismDetail(org) {
+  // Ensure detail arrays exist even if detail fetch failed
+  org.diseases = org.diseases || [];
+  org.interventions = org.interventions || [];
+  org.phenotypes = org.phenotypes || [];
+  org.bodysites = org.bodysites || [];
+  org.specialtyGenes = org.specialtyGenes || [];
+  org.synonyms = org.synonyms || [];
+  const panel = document.getElementById("organism-detail");
+  panel.classList.remove("hidden");
+
+  // Header
+  const genomeStr = org.genomeId
+    ? `${org.genomeId}${org.genomeAccession ? " ("+org.genomeAccession+")" : ""} · ${org.isMag ? "MAG" : "Isolate"} · ${org.completeness}% complete, ${org.contamination}% contaminated · ${org.genomeSource}${org.totalGenomesAvailable > 1 ? " · 1 of "+org.totalGenomesAvailable+" available" : ""}`
+    : null;
+
+  // ── Sub-tab contents ──────────────────────────────────────────────────────
+
+  // Overview -- structured description composed from real stored data
+  const topDiseases = org.diseases
+    .filter(d => d.grade === "A")
+    .slice(0, 4)
+    .map(d => d.disease);
+  const topSites = [...new Set(org.bodysites.map(s => s.site))].slice(0, 3);
+  const sgTypes = [...new Set((org.specialtyGenes||[]).map(g => g.property))];
+
+  const descParts = [];
+  if (org.lineage) descParts.push(`<strong>${org.name}</strong> is a ${org.rank}-level taxon in the lineage: <span style="font-family:var(--mono);font-size:12px;color:var(--text-secondary)">${org.lineage}</span>.`);
+  else descParts.push(`<strong>${org.name}</strong> (${org.rank}).`);
+
+  if (org.diseaseCount > 0) {
+    const gradeA = org.diseases.filter(d => d.grade === "A").length;
+    descParts.push(`This organism has <strong>${org.diseaseCount} disease association${org.diseaseCount!==1?"s":""}</strong> in this database${gradeA > 0 ? `, of which <strong>${gradeA}</strong> are grade A (replicated, no contradictions)` : ""}${topDiseases.length ? `, including ${topDiseases.join(", ")}` : ""}.`);
+  }
+  if (org.bodysites.length > 0) {
+    descParts.push(`Body-site data places this organism in: ${topSites.join(", ")}${org.bodysites.length > 3 ? ` and ${org.bodysites.length - 3} other sites` : ""}.`);
+  }
+  if (sgTypes.length > 0) {
+    descParts.push(`BV-BRC specialty gene data records <strong>${org.specialtyGeneCount} genes</strong> across ${sgTypes.length} categories: ${sgTypes.join(", ")}.`);
+  }
+  if (org.interventionCount > 0) {
+    descParts.push(`${org.interventionCount} intervention association${org.interventionCount!==1?"s":""} are recorded.`);
+  }
+
+  const overviewHtml = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px;line-height:1.7;font-size:13.5px">
+      ${descParts.join(" ")}
+    </div>
+    ${org.synonyms.length ? `<div class="synonyms"><strong style="color:var(--text-secondary)">Historical / synonym names:</strong> ${org.synonyms.join(", ")}</div>` : ""}
+    ${genomeStr ? `<div class="genome-box" style="margin-top:10px"><table>
+      <tr><td>Genome ID</td><td>${org.genomeId}</td></tr>
+      ${org.genomeAccession ? `<tr><td>Accession</td><td>${org.genomeAccession}</td></tr>` : ""}
+      <tr><td>Type</td><td>${org.isMag ? "MAG (metagenome-assembled)" : "Isolate genome"}</td></tr>
+      <tr><td>Completeness</td><td>${org.completeness}% · ${org.contamination}% contamination</td></tr>
+      <tr><td>Source</td><td>${org.genomeSource}</td></tr>
+      ${org.totalGenomesAvailable > 1 ? `<tr><td>Available</td><td>1 of ${org.totalGenomesAvailable} genomes; this is the highest-quality representative</td></tr>` : ""}
+    </table></div>` : `<div style="color:var(--text-muted);font-size:13px;margin-top:10px">No representative genome in UHGG v2.0.2.</div>`}`;
+
+  // Diseases — two-tier cards
+  const diseasesHtml = org.diseases.length
+    ? org.diseases.map(d => {
+        const causal = causalBadge(d.studyType);
+        const row1parts = [
+          d.direction,
+          `${d.replications} replication${d.replications!==1?"s":""}`,
+          d.contradictions ? `<span style="color:#EF4444">${d.contradictions} contradiction${d.contradictions!==1?"s":""}</span>` : "0 contradictions",
+          d.sampleSize ? `n=${d.sampleSize}` : null,
+          mappedBadge(d.isMapped),
+        ].filter(Boolean);
+        const row2parts = [
+          d.detectionMethod ? `${d.detectionMethod}${d.sequencingRegion&&d.sequencingRegion!=="NA"?" V"+d.sequencingRegion:""}` : null,
+          d.sampleSite ? `sampled: ${d.sampleSite}` : null,
+          d.ldaScore !== null && d.ldaScore !== undefined ? `LDA≥${d.ldaScore}` : null,
+          d.populationAge ? d.populationAge.split(";").join(", ") : null,
+          d.populationSex || null,
+          d.geography || null,
+        ].filter(Boolean);
+        return `<div class="d-card">
+          <div class="d-card-head">
+            <span class="d-card-name" style="cursor:pointer;text-decoration:underline;text-decoration-color:var(--border2);text-underline-offset:3px" onclick="jumpToDiseaseDetail('${d.mondoId}')" title="View this disease's full organism list">${d.disease}</span>
+            ${gradeBadge(d.grade)}${causal ? " "+causal : ""}
+          </div>
+          <div class="d-card-row1">${row1parts.join('<span class="d-sep"> · </span>')}</div>
+          ${row2parts.length ? `<div class="d-card-row2">${row2parts.join('<span class="d-sep"> · </span>')}</div>` : ""}
+        </div>`;
+      }).join("")
+    : `<p class="empty">No disease associations.</p>`;
+
+  // Interventions — compact horizontal cards
+  const intHtml = org.interventions.length
+    ? org.interventions.map(i => `
+        <div class="i-card">
+          <div class="i-card-left">${i.name} ${typeBadge(i.type)}</div>
+          <div class="i-card-right">${i.direction} · ${i.pvalue !== null && i.pvalue !== undefined ? `<span class="pval">p=${fmtP(i.pvalue)}</span>` : (i.evidenceLevel||"")}</div>
+        </div>`).join("")
+    : `<p class="empty">No intervention data.</p>`;
+
+  // Phenotypes
+  const phenoHtml = org.phenotypes.length
+    ? org.phenotypes.map(p => `
+        <div class="p-card">
+          <span style="font-weight:600;font-size:13px">${p.name}</span>
+          <span style="font-size:12px;color:var(--text-secondary)">${p.direction} · ${p.studyCount} signature${p.studyCount!==1?"s":""}</span>
+        </div>`).join("")
+    : `<p class="empty">No phenotype associations (HP terms from BugSigDB).</p>`;
+
+  // Body sites
+  const siteHtml = org.bodysites.length
+    ? org.bodysites.map(s => {
+        if (s.clinicalIsolateCount !== null && s.clinicalIsolateCount !== undefined) {
+          return `<div class="site-card">
+            <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">${s.site} ${pathoBadge(s.pathogenicFraction)}</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:5px">${s.pathogenicIsolateCount} of ${s.clinicalIsolateCount} clinical isolates pathogenic · reflects clinical sequencing bias, not general ecology (BV-BRC/BacSPaD)</div>
+          </div>`;
+        }
+        if (s.studyCount !== null && s.studyCount !== undefined) {
+          return `<div class="site-card">
+            <div style="font-weight:600;font-size:13px">${s.site}</div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:5px">Detected in ${s.studyCount} independent experiment${s.studyCount!==1?"s":""} (Disbiome case-control studies) · presence signal, not population prevalence</div>
+          </div>`;
+        }
+        return `<div class="site-card">
+          <div style="font-weight:600;font-size:13px">${s.site}</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:5px">${s.status||"unknown"} cohort · ${s.flora||"unclassified"}</div>
+        </div>`;
+      }).join("")
+    : `<p class="empty">No body-site data.</p>`;
+
+  // Specialty genes — grouped by type
+  const sgByType = {};
+  (org.specialtyGenes||[]).forEach(g => { if(!sgByType[g.property]) sgByType[g.property]=[]; sgByType[g.property].push(g); });
+  const sgHtml = Object.keys(sgByType).length
+    ? Object.entries(sgByType).map(([prop, genes]) => {
+        const color = PROP_COLORS[prop]||"#64748B";
+        const shown = genes.slice(0,12);
+        const extra = genes.length - shown.length;
+        const rows = shown.map(g => `<div class="sg-row">
+          <span class="sg-gene">${g.gene||"—"}</span>
+          <span class="sg-product">${g.product||""}</span>
+          <span class="sg-source">${(g.source||"").replace(/^[^:]+:\s*/,"")}</span>
+        </div>`).join("");
+        return `<div class="sg-section">
+          <div class="sg-section-head">
+            <span class="badge" style="background:${color}">${prop}</span>
+            <span style="color:var(--text-muted);font-size:11px">${genes.length} genes</span>
+          </div>
+          ${rows}
+          ${extra>0 ? `<div class="sg-more">+ ${extra} more genes not shown</div>` : ""}
+        </div>`;
+      }).join("")
+    : `<p class="empty">No specialty gene data in BV-BRC for this organism.</p>`;
+
+  // Sub-tab counts
+  const dCount = org.diseases.length;
+  const iCount = org.interventions.length;
+  const pCount = org.phenotypes.length;
+  const sCount = org.bodysites.length;
+  const gCount = (org.specialtyGenes||[]).length;
+
+  panel.innerHTML = `
+    <div class="detail-header">
+      <h2>${org.name}</h2>
+      <div class="detail-meta">NCBI taxid: ${org.taxid} · ${org.rank}</div>
+    </div>
+    <div class="sub-tabs">
+      <button class="sub-tab-btn active" data-sub="overview">Overview</button>
+      <button class="sub-tab-btn" data-sub="diseases">Diseases <span class="sub-count">${dCount}</span></button>
+      <button class="sub-tab-btn" data-sub="interventions">Interventions <span class="sub-count">${iCount}</span></button>
+      <button class="sub-tab-btn" data-sub="phenotypes">Phenotypes <span class="sub-count">${pCount}</span></button>
+      <button class="sub-tab-btn" data-sub="sites">Body sites <span class="sub-count">${sCount}</span></button>
+      <button class="sub-tab-btn" data-sub="genes">Specialty genes <span class="sub-count">${gCount}</span></button>
+    </div>
+    <div class="sub-panel active" id="sub-overview">${overviewHtml}</div>
+    <div class="sub-panel" id="sub-diseases">${diseasesHtml}</div>
+    <div class="sub-panel" id="sub-interventions">${intHtml}</div>
+    <div class="sub-panel" id="sub-phenotypes">${phenoHtml}</div>
+    <div class="sub-panel" id="sub-sites">${siteHtml}</div>
+    <div class="sub-panel" id="sub-genes">${sgHtml}</div>`;
+
+  // Wire up sub-tabs
+  panel.querySelectorAll(".sub-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      panel.querySelectorAll(".sub-tab-btn").forEach(b => b.classList.remove("active"));
+      panel.querySelectorAll(".sub-panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      panel.querySelector("#sub-" + btn.dataset.sub).classList.add("active");
+    });
+  });
+
+  panel.scrollIntoView({behavior:"smooth", block:"nearest"});
+}
+
+// ── Disease table ─────────────────────────────────────────────────────────────
+const disTable = new Tabulator("#diseases-table", {
+  data: DATA.diseases,
+  layout: "fitColumns",
+  height: "340px",
+  columns: [
+    {title:"Disease", field:"name", widthGrow:2},
+    {title:"Status", field:"isMapped", formatter: c => mappedBadge(c.getValue()), width:130},
+    {title:"Organisms", field:"organismCount", sorter:"number", width:110},
+    {title:"Grade A", field:"gradeA", sorter:"number", width:90},
+    {title:"Conflicting", field:"gradeD", sorter:"number", width:100},
+  ],
+  initialSort:[{column:"organismCount",dir:"desc"}],
+});
+disTable.on("rowClick", (e, row) => {
+  const d = row.getData();
+  const panel = document.getElementById("disease-detail");
+  panel.classList.remove("hidden");
+  const orgsHtml = d.organisms.length
+    ? d.organisms.map(o => `<div class="card">
+        <div class="card-head"><span class="org-name">${o.organism}</span> ${gradeBadge(o.grade)}${causalBadge(o.studyType) ? " "+causalBadge(o.studyType) : ""}</div>
+        <div class="card-cap">${o.direction} · ${o.replications} replications · ${o.contradictions} contradictions</div>
+      </div>`).join("")
+    : `<p class="empty">No organisms.</p>`;
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+      <h2 style="margin:0">${d.name} ${mappedBadge(d.isMapped)}</h2>
+      <button class="export-btn" onclick="jumpToOrganismsForDisease('${d.mondoId}','${d.name.replace(/'/g,"\\'")}')">→ view ${d.organismCount} organisms</button>
+    </div>
+    ${orgsHtml}`;
+});
+disTable.on("tableBuilt", () => { document.getElementById("dis-count").textContent = DATA.diseases.length + " diseases"; });
+document.getElementById("dis-search").addEventListener("input", e => {
+  disTable.setFilter("name","like",e.target.value);
+  document.getElementById("dis-count").textContent = disTable.getDataCount("active") + " diseases";
+});
+
+// ── Interventions table ───────────────────────────────────────────────────────
+const intTable = new Tabulator("#interventions-table", {
+  data: DATA.interventions,
+  layout: "fitColumns",
+  height: "340px",
+  columns: [
+    {title:"Intervention", field:"name", widthGrow:2},
+    {title:"Type", field:"type", width:110, formatter: c => typeBadge(c.getValue())},
+    {title:"Organisms", field:"organismCount", sorter:"number", width:110},
+    {title:"Best p-value", field:"bestPvalue", sorter:"number", width:130, formatter: c => c.getValue()!==null&&c.getValue()!==undefined ? `<span class="pval">${fmtP(c.getValue())}</span>` : `<span style="color:var(--text-muted)">—</span>`},
+  ],
+  initialSort:[{column:"organismCount",dir:"desc"}],
+});
+intTable.on("rowClick", (e, row) => {
+  const d = row.getData();
+  const panel = document.getElementById("intervention-detail");
+  panel.classList.remove("hidden");
+  const orgsHtml = d.organisms.length
+    ? d.organisms.map(o => `<div class="card">
+        <div class="card-head"><span class="org-name">${o.organism}</span></div>
+        <div class="card-cap">${o.direction} · ${o.pvalue!==null&&o.pvalue!==undefined ? `<span class="pval">p=${fmtP(o.pvalue)}</span>` : (o.evidenceLevel||"")}</div>
+      </div>`).join("")
+    : `<p class="empty">No organisms.</p>`;
+  panel.innerHTML = `<h2>${d.name} ${typeBadge(d.type)}</h2>${orgsHtml}`;
+});
+intTable.on("tableBuilt", () => { document.getElementById("int-count").textContent = DATA.interventions.length + " interventions"; });
+
+function applyIntFilters() {
+  const q = document.getElementById("int-search").value.toLowerCase();
+  const type = document.getElementById("int-type-filter").value;
+  intTable.setFilter(d => {
+    if (q && !d.name.toLowerCase().includes(q)) return false;
+    if (type && d.type !== type) return false;
+    return true;
+  });
+  document.getElementById("int-count").textContent = intTable.getDataCount("active") + " interventions";
+}
+document.getElementById("int-search").addEventListener("input", applyIntFilters);
+document.getElementById("int-type-filter").addEventListener("change", applyIntFilters);
+
+// ── Cross-tab navigation ──────────────────────────────────────────────────────
+function jumpToTab(tabName) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+  if (btn) { btn.classList.add("active"); document.getElementById("tab-" + tabName).classList.add("active"); }
+}
+
+function jumpToDiseaseDetail(mondoId) {
+  jumpToTab("diseases");
+  const row = disTable.getData().find(d => d.mondoId === mondoId);
+  if (!row) return;
+  disTable.clearFilter();
+  const panel = document.getElementById("disease-detail");
+  panel.classList.remove("hidden");
+  const orgsHtml = row.organisms.length
+    ? row.organisms.map(o => `<div class="card">
+        <div class="card-head"><span class="org-name">${o.organism}</span> ${gradeBadge(o.grade)}${o.studyType && o.studyType !== "observational" ? " "+causalBadge(o.studyType) : ""}</div>
+        <div class="card-cap">${o.direction} · ${o.replications} replications · ${o.contradictions} contradictions</div>
+      </div>`).join("")
+    : `<p class="empty">No organisms.</p>`;
+  panel.innerHTML = `<h2>${row.name} ${mappedBadge(row.isMapped)}</h2>${orgsHtml}`;
+  setTimeout(() => panel.scrollIntoView({behavior:"smooth", block:"nearest"}), 100);
+}
+
+function jumpToOrganismsForDisease(mondoId, diseaseName) {
+  jumpToTab("organisms");
+  orgTable.setFilter(d => d.diseases.some(dis => dis.mondoId === mondoId));
+  document.getElementById("org-count").textContent =
+    orgTable.getDataCount("active") + ` organisms associated with "${diseaseName}"`;
+  document.getElementById("org-search").value = "";
+  document.getElementById("organism-detail").classList.add("hidden");
+}
+
+// ── CSV Export ────────────────────────────────────────────────────────────────
+function downloadCSV(filename, rows) {
+  if (!rows.length) return;
+  const headers = Object.keys(rows[0]);
+  const escape = v => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    return s.includes(",") || s.includes('"') || s.includes("\n")
+      ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.join(","), ...rows.map(r => headers.map(h => escape(r[h])).join(","))];
+  const blob = new Blob([lines.join("\n")], {type:"text/csv"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+document.getElementById("org-export-summary").addEventListener("click", () => {
+  const rows = orgTable.getData("active").map(o => ({
+    ncbi_taxid: o.taxid,
+    name: o.name,
+    rank: o.rank,
+    lineage: o.lineage || "",
+    disease_associations: o.diseaseCount,
+    intervention_associations: o.interventionCount,
+    phenotype_associations: o.phenotypeCount,
+    specialty_gene_count: o.specialtyGeneCount,
+    genome_quality: o.genomeQuality || "",
+    genome_completeness_pct: o.completeness || "",
+    genome_contamination_pct: o.contamination || "",
+  }));
+  downloadCSV("microbiome_kg_organisms.csv", rows);
+});
+
+document.getElementById("org-export-associations").addEventListener("click", () => {
+  const rows = [];
+  DATA.organisms.forEach(o => {
+    o.diseases.forEach(d => {
+      rows.push({
+        ncbi_taxid: o.taxid,
+        organism_name: o.name,
+        organism_rank: o.rank,
+        mondo_id: d.mondoId,
+        disease_name: d.disease,
+        direction: d.direction,
+        evidence_grade: d.grade,
+        replication_count: d.replications,
+        contradiction_count: d.contradictions,
+        study_type: d.studyType || "",
+        sample_size: d.sampleSize || "",
+        lda_score: d.ldaScore !== null && d.ldaScore !== undefined ? d.ldaScore : "",
+        sample_site: d.sampleSite || "",
+        detection_method: d.detectionMethod || "",
+        sequencing_region: d.sequencingRegion || "",
+        population_age: d.populationAge || "",
+        population_sex: d.populationSex || "",
+        geography: d.geography || "",
+        mondo_mapped: d.isMapped ? "yes" : "no",
+      });
+    });
+  });
+  downloadCSV("microbiome_kg_all_associations.csv", rows);
+});
+
+document.getElementById("dis-export").addEventListener("click", () => {
+  const rows = disTable.getData("active").map(d => ({
+    mondo_id: d.mondoId,
+    disease_name: d.name,
+    mondo_mapped: d.isMapped ? "yes" : "no",
+    organism_count: d.organismCount,
+    grade_a_count: d.gradeA,
+    grade_d_count: d.gradeD,
+  }));
+  downloadCSV("microbiome_kg_diseases.csv", rows);
+});
+
+document.getElementById("int-export").addEventListener("click", () => {
+  const rows = intTable.getData("active").map(i => ({
+    intervention_id: i.id,
+    name: i.name,
+    type: i.type,
+    organism_count: i.organismCount,
+    best_pvalue: i.bestPvalue !== null && i.bestPvalue !== undefined ? i.bestPvalue : "",
+  }));
+  downloadCSV("microbiome_kg_interventions.csv", rows);
+});
+
+document.getElementById("pheno-export").addEventListener("click", () => {
+  const rows = phenoTable.getData("active").map(p => ({
+    hpo_id: p.hpoId,
+    phenotype_name: p.name,
+    organism_count: p.organismCount,
+  }));
+  downloadCSV("microbiome_kg_phenotypes.csv", rows);
+});
+const phenoTable = new Tabulator("#phenotypes-table", {
+  data: DATA.phenotypes,
+  layout: "fitColumns",
+  height: "340px",
+  columns: [
+    {title:"Phenotype", field:"name", widthGrow:2},
+    {title:"Organisms", field:"organismCount", sorter:"number", width:120},
+  ],
+  initialSort:[{column:"organismCount",dir:"desc"}],
+});
+phenoTable.on("rowClick", (e, row) => {
+  const d = row.getData();
+  const panel = document.getElementById("phenotype-detail");
+  panel.classList.remove("hidden");
+  const orgsHtml = d.organisms.length
+    ? d.organisms.map(o => `<div class="card">
+        <div class="card-head"><span class="org-name">${o.organism}</span></div>
+        <div class="card-cap">${o.direction} · ${o.studyCount} signature${o.studyCount!==1?"s":""}</div>
+      </div>`).join("")
+    : `<p class="empty">No organisms.</p>`;
+  panel.innerHTML = `<h2>${d.name}</h2>${orgsHtml}`;
+});
+phenoTable.on("tableBuilt", () => { document.getElementById("pheno-count").textContent = DATA.phenotypes.length + " phenotypes"; });
+document.getElementById("pheno-search").addEventListener("input", e => {
+  phenoTable.setFilter("name","like",e.target.value);
+  document.getElementById("pheno-count").textContent = phenoTable.getDataCount("active") + " phenotypes";
+});
+</script>
+</body>
+</html>

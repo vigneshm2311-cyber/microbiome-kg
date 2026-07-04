@@ -1,0 +1,6 @@
+db/
+data/
+.DS_Store
+__pycache__/
+*.pyc
+viewer/app.py
