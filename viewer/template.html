@@ -314,7 +314,7 @@ async function getDetail(taxid) {
     detailCallbacks.push(() => resolve(DETAIL_DATA[taxid] || {}));
     if (!detailLoading) {
       detailLoading = true;
-      fetch("data-organisms.json.gz")
+      fetch("data-organisms.json")
         .then(r => r.json())
         .then(d => {
           DETAIL_DATA = d;

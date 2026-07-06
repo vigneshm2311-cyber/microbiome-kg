@@ -247,39 +247,14 @@ def main():
         f"{len(data['interventions'])} interventions, {len(data['phenotypes'])} phenotypes."
     )
 
-    # Split into two files to keep index.html under GitHub's 100MB limit:
-    # data-summary.json  -- table-level fields only (~3MB), embedded in index.html
-    # data-organisms.json -- full organism detail with nested arrays (~120MB),
-    #                        fetched on first click and cached in memory
-
-    ORGANISM_DETAIL_KEYS = {"diseases", "interventions", "phenotypes", "bodysites",
-                            "synonyms", "specialtyGenes"}
-
-    summary_orgs = [{k: v for k, v in o.items() if k not in ORGANISM_DETAIL_KEYS}
-                    for o in data["organisms"]]
-    detail_orgs = {o["taxid"]: {k: v for k, v in o.items() if k in ORGANISM_DETAIL_KEYS}
-                   for o in data["organisms"]}
-
-    summary_data = {
-        "organisms": summary_orgs,
-        "diseases": data["diseases"],
-        "interventions": data["interventions"],
-        "phenotypes": data["phenotypes"],
-    }
-
-    # Write the large detail file separately
     output_dir = Path(__file__).resolve().parent
-    DETAIL_PATH.write_text(json.dumps(detail_orgs))
-    print(f"Wrote {DETAIL_PATH} ({DETAIL_PATH.stat().st_size / 1024 / 1024:.1f} MB) -- organism detail")
-
-    # Embed only the summary into index.html
     template_path = output_dir / "template.html"
     html = template_path.read_text()
-    html = html.replace("__DATA_JSON__", json.dumps(summary_data))
+    html = html.replace("__DATA_JSON__", json.dumps(data))
     output_path = output_dir / "index.html"
     output_path.write_text(html)
-    print(f"Wrote {output_path} ({output_path.stat().st_size / 1024:.0f} KB) -- main viewer")
-    print("Open index.html in a browser. Keep data-organisms.json in the same folder.")
+    print(f"Wrote {output_path} ({output_path.stat().st_size / 1024 / 1024:.1f} MB)")
+    print("Serve with: python3 -m http.server 8080")
 
 
 if __name__ == "__main__":
